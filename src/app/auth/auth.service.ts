@@ -21,6 +21,7 @@ export class AuthService {
   // Create a stream of logged in status to communicate throughout app
   loggedIn: boolean;
   loggedIn$ = new BehaviorSubject<boolean>(this.loggedIn);
+  isAdmin: boolean;
   constructor(private router: Router) {
     // If authenticated, set local profile property
     // and update login status subject.
@@ -29,6 +30,7 @@ export class AuthService {
     const lsProfile = localStorage.getItem('profile');
     if (this.tokenValid) {
       this.userProfile = JSON.parse(lsProfile);
+      this.isAdmin = localStorage.getItem('isAdmin') === 'true';
       this.setLoggedIn(true);
     } else if (!this.tokenValid && lsProfile) {
       this.logout();
@@ -39,7 +41,11 @@ export class AuthService {
     this.loggedIn$.next(value);
     this.loggedIn = value;
   }
-  login() {
+  login(redirect?: string) {
+    // Set redirect after login
+    const _redirect = redirect ? redirect : this.router.url;
+    localStorage.setItem('authRedirect', _redirect);
+    // Auth0 authorize request
     // Auth0 authorize request
     this.auth0.authorize();
   }
@@ -50,6 +56,8 @@ export class AuthService {
         window.location.hash = '';
         this._getProfile(authResult);
       } else if (err) {
+        this._clearRedirect();
+        this.router.navigate(['/']);
         console.error(`Error authenticating: ${err.error}`);
       }
       this.router.navigate(['/']);
@@ -60,10 +68,32 @@ export class AuthService {
     this.auth0.client.userInfo(authResult.accessToken, (err, profile) => {
       if (profile) {
         this._setSession(authResult, profile);
+        this.router.navigate([localStorage.getItem('authRedirect') || '/']);
+        this._clearRedirect();
       } else if (err) {
         console.error(`Error authenticating: ${err.error}`);
       }
+      this._redirect();
+      this._clearRedirect();
     });
+  }
+   private _clearRedirect() {
+    // Remove redirect from localStorage
+    localStorage.removeItem('authRedirect');
+  }
+  private _redirect() {
+    // Redirect with or without 'tab' query parameter
+    // Note: does not support additional params besides 'tab'
+    const fullRedirect = decodeURI(localStorage.getItem('authRedirect'));
+    const redirectArr = fullRedirect.split('?tab=');
+    const navArr = [redirectArr[0] || '/'];
+    const tabObj = redirectArr[1] ? { queryParams: { tab: redirectArr[1] }} : null;
+
+    if (!tabObj) {
+      this.router.navigate(navArr);
+    } else {
+      this.router.navigate(navArr, tabObj);
+    }
   }
   private _setSession(authResult, profile) {
     // Save session data and update login status subject
@@ -74,6 +104,8 @@ export class AuthService {
     localStorage.setItem('expires_at', expiresAt);
     localStorage.setItem('profile', JSON.stringify(profile));
     this.userProfile = profile;
+    this.isAdmin = this._checkAdmin(profile);
+    localStorage.setItem('isAdmin', this.isAdmin.toString());
     // Update login status in loggedIn$ stream
     this.setLoggedIn(true);
   }
@@ -83,11 +115,19 @@ export class AuthService {
     localStorage.removeItem('id_token');
     localStorage.removeItem('profile');
     localStorage.removeItem('authRedirect');
+    localStorage.removeItem('isAdmin');
+    this._clearRedirect();
     // Reset local properties, update loggedIn$ stream
     this.userProfile = undefined;
+    this.isAdmin = undefined;
     this.setLoggedIn(false);
     // Return to homepage
     this.router.navigate(['/']);
+  }
+  private _checkAdmin(profile) {
+    // Check if the user has admin role
+   const roles = profile[AUTH_CONFIG.NAMESPACE] || [];
+    return roles.indexOf('admin') > -1;
   }
   get tokenValid(): boolean {
     // Check if current time is past access token's expiration

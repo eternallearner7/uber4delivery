@@ -1,6 +1,7 @@
-// src/app/pages/home/home.component.ts
+// src/app/pages/admin/admin.component.ts
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Title } from '@angular/platform-browser';
+import { AuthService } from './../../auth/auth.service';
 import { ApiService } from './../../core/api.service';
 import { UtilsService } from './../../core/utils.service';
 import { FilterSortService } from './../../core/filter-sort.service';
@@ -8,23 +9,24 @@ import { Subscription } from 'rxjs/Subscription';
 import { EventModel } from './../../core/models/event.model';
 
 @Component({
-  selector: 'app-home',
-  templateUrl: './home.component.html',
-  styleUrls: ['./home.component.scss']
+  selector: 'app-admin',
+  templateUrl: './admin.component.html',
+  styleUrls: ['./admin.component.scss']
 })
-export class HomeComponent implements OnInit, OnDestroy {
-  pageTitle = 'Events';
-  eventListSub: Subscription;
+export class AdminComponent implements OnInit, OnDestroy {
+  pageTitle = 'Admin';
+  eventsSub: Subscription;
   eventList: EventModel[];
   filteredEvents: EventModel[];
   loading: boolean;
   error: boolean;
-  query: '';
+  query = '';
 
   constructor(
     private title: Title,
-    public utils: UtilsService,
+    public auth: AuthService,
     private api: ApiService,
+    public utils: UtilsService,
     public fs: FilterSortService) { }
 
   ngOnInit() {
@@ -34,9 +36,9 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   private _getEventList() {
     this.loading = true;
-    // Get future, public events
-    this.eventListSub = this.api
-      .getEvents$()
+    // Get all (admin) events
+    this.eventsSub = this.api
+      .getAdminEvents$()
       .subscribe(
         res => {
           this.eventList = res;
@@ -61,7 +63,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.eventListSub.unsubscribe();
+    this.eventsSub.unsubscribe();
   }
 
 }
